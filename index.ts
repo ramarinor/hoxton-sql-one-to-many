@@ -18,11 +18,11 @@ const getMuseums = db.prepare(`
 const getWorks = db.prepare(`
     SELECT * FROM works;
 `);
-const getWorksById = db.prepare(`
+const getWorkById = db.prepare(`
     SELECT * FROM works WHERE id =?;
 `);
 const getWorksByMuseumId = db.prepare(`
-    SELECT * FROM works WHERE museumId = ?
+    SELECT * FROM works WHERE museumId = ?;
 `);
 const getMuseumById = db.prepare(`
     SELECT*FROM museums WHERE id =?;
@@ -36,13 +36,17 @@ const createWork = db.prepare(`
 `);
 
 const deleteWorkById = db.prepare(`
-    DELETE FROM works WHERE id=?
+    DELETE FROM works WHERE id=?;
 `);
 const deleteMuseumById = db.prepare(`
     DELETE FROM museums WHERE id = ?;
 `);
 const deleteWorksByMuseumId = db.prepare(`
     DELETE FROM works WHERE museumId = ?;
+`);
+
+const moveWorkToMusuem = db.prepare(`
+UPDATE works SET museumId=? WHERE id=?;
 `);
 
 app.get('/museums', (req, res) => {
@@ -79,7 +83,7 @@ app.get('/works', (req, res) => {
 
 app.get('/works/:id', (req, res) => {
   const id = req.params.id;
-  const work = getWorksById.get(id);
+  const work = getWorkById.get(id);
   if (work) {
     const museum = getMuseumById.get(work.museumId);
     work.museum = museum;
@@ -128,7 +132,7 @@ app.post('/works', (req, res) => {
     const museum = getMuseumById.get(museumId);
     if (museum) {
       const result = createWork.run(name, picture, museumId);
-      const newWork = getWorksById.get(result.lastInsertRowid);
+      const newWork = getWorkById.get(result.lastInsertRowid);
       newWork.museum = museum;
       res.status(200).send(newWork);
     } else {
@@ -158,6 +162,32 @@ app.delete('/works/:id', (req, res) => {
     res.send({ message: 'Work deleted sucessfully!' });
   } else {
     res.status(404).send({ error: 'Work was not found!' });
+  }
+});
+
+app.patch('/works/:id', (req, res) => {
+  const workId = req.params.id;
+  const { museumId } = req.body;
+  const errors = [];
+  if (typeof museumId !== 'number') {
+    errors.push('MuseumId missing or not a number!');
+  }
+  const museum = getMuseumById.get(museumId);
+  if (museum === undefined) {
+    errors.push('Museum was not found');
+  }
+  if (errors.length === 0) {
+    const workToMove = getWorkById.get(workId);
+    if (workToMove) {
+      moveWorkToMusuem.run(museumId, workId);
+      workToMove.museumId = museumId;
+      workToMove.museum = museum;
+      res.send(workToMove);
+    } else {
+      res.status(404).send({ error: 'Work was not found!' });
+    }
+  } else {
+    res.status(400).send(errors);
   }
 });
 
